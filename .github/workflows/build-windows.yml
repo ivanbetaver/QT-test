@@ -126,7 +126,7 @@ jobs:
     # 12. Упаковка с помощью windeployqt (Сервер)
     - name: Deploy Qt dependencies for Server
       run: |
-        & "${{ runner.temp }}\Qt\bin\windeployqt.exe" `
+        & "D:\a\_temp\Qt\Qt\6.5.2\msvc2019_64\bin\windeployqt.exe" `
           --release `
           --no-compiler-runtime `
           --no-translations `
@@ -138,7 +138,7 @@ jobs:
     # 13. Упаковка с помощью windeployqt (Клиент)
     - name: Deploy Qt dependencies for Client
       run: |
-        & "D:\a\_temp\install-qt-action\Qt\${{ env.QT_VERSION }}\msvc2019_64\bin\windeployqt.exe" `
+        & "D:\a\_temp\Qt\Qt\6.5.2\msvc2019_64\bin\windeployqt.exe" `
           --release `
           --no-compiler-runtime `
           --no-translations `
