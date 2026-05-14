@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(server)
+project(Server)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
@@ -9,7 +9,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network)
 
 qt6_standard_project_setup()
 
-add_executable(server
+add_executable(Server
     main.cpp
     ServerMainWindow.h
     ServerMainWindow.cpp
