@@ -26,8 +26,7 @@ TcpClient::TcpClient(QObject *parent)
     connect(m_socket, &QTcpSocket::connected, this, &TcpClient::onConnected);
     connect(m_socket, &QTcpSocket::disconnected, this, &TcpClient::onDisconnected);
     connect(m_socket, &QTcpSocket::readyRead, this, &TcpClient::onReadyRead);
-    connect(m_socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::error),
-            this, &TcpClient::onError);
+    connect(m_socket, &QTcpSocket::errorOccurred, this, &TcpClient::onError);
 
     // Подключение таймеров
     connect(m_reconnectTimer, &QTimer::timeout, this, &TcpClient::onReconnectTimer);
