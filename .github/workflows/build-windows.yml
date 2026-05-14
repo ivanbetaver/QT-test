@@ -113,7 +113,7 @@ jobs:
     # 10. Подготовка артефактов для клиента
     - name: Prepare Client artifacts
       run: |
-        Copy-Item "build_client/Release/TelecomClient.exe" -Destination "artifacts/Client/"
+        Copy-Item "build_client/Release/Client.exe" -Destination "artifacts/Client/"
         Copy-Item "build_client/Release/*.dll" -Destination "artifacts/Client/" -ErrorAction SilentlyContinue
     
     # 11. Копирование дополнительных файлов
@@ -154,7 +154,7 @@ jobs:
     # 15. Создание ZIP архива с клиентом
     - name: Create Client ZIP
       run: |
-        Compress-Archive -Path "artifacts/Client/*" -DestinationPath "artifacts/TelecomClient-${{ github.run_number }}.zip"
+        Compress-Archive -Path "artifacts/Client/*" -DestinationPath "artifacts/Client-${{ github.run_number }}.zip"
     
     # 16. Создание полного архива
     - name: Create Full Archive
