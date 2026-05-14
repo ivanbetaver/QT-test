@@ -8,6 +8,8 @@
 #include <QDateTime>
 #include <QGroupBox>
 #include <QMessageBox>
+#include <QJsonDocument>
+
 
 class Ui::ServerMainWindow {
 public:
