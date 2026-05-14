@@ -15,8 +15,6 @@ add_executable(TelecomServer
     ServerMainWindow.cpp
     TcpServer.h
     TcpServer.cpp
-    ClientHandler.h
-    ClientHandler.cpp
     SettingsDialog.h
     SettingsDialog.cpp
 )
