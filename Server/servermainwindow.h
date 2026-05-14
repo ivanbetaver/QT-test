@@ -43,7 +43,7 @@ private slots:
 private:
     void setupUI();
     void createTables();
-    void addClientToTable(int clientId, const QString& ip, int port);
+    void addClientToTable(int clientId, const QString& ip, const QString& status);
     void addDataToTable(int clientId, const QString& dataType,
                         const QString& content, const QDateTime& time);
     void removeClientFromTable(int clientId);
