@@ -157,4 +157,12 @@ jobs:
     - name: Create Full Archive
       run: |
         Compress-Archive -Path "artifacts/Server", "artifacts/Client", "README.md" -DestinationPath "artifacts/TelecomSystem-Full-${{ github.run_number }}.zip"
-    
+
+    # 17. Загрузка артефактов
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: QT-Test-Build-${{ github.run_number }}
+        path: artifacts/
+        retention-days: 30
+        compression-level: 9
