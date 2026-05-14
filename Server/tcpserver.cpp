@@ -53,8 +53,8 @@ void TcpServer::incomingConnection(qintptr socketDescriptor)
     // Подключение сигналов
     connect(socket, &QTcpSocket::readyRead, this, &TcpServer::onClientReadyRead);
     connect(socket, &QTcpSocket::disconnected, this, &TcpServer::onClientDisconnected);
-    connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::error),
-            this, &TcpServer::onClientError);
+    connect(socket, &QTcpSocket::errorOccurred, this, &TcpServer::onClientError);
+
 
     // Отправка подтверждения подключения
     QJsonObject ack;
