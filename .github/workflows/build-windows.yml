@@ -1,0 +1,208 @@
+name: Build Windows App
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'Server/**'
+      - 'Client/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'Server/**'
+      - 'Client/**'
+  workflow_dispatch:  # Ручной запуск
+
+env:
+  # Пути к проектам
+  SERVER_PATH: Server
+  CLIENT_PATH: Client
+  # Версия Qt
+  QT_VERSION: 6.5.2
+  QT_ARCH: win64_msvc2019_64
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    # 1. Checkout репозитория
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    # 2. Установка CMake
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '3.28.x'
+    
+    # 3. Установка Visual Studio Build Tools
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+    
+    # 4. Установка Qt
+    - name: Setup Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: ${{ env.QT_VERSION }}
+        host: windows
+        target: desktop
+        arch: win64_msvc2019_64
+        install-deps: true
+        modules: qt5compat qtmultimedia qtserialport
+        cache: true
+    
+    # 5. Кэширование зависимостей
+    - name: Cache Qt
+      id: cache-qt
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/Qt
+          D:/a/_temp/install-qt-action
+        key: ${{ runner.os }}-qt-${{ env.QT_VERSION }}-${{ hashFiles('**/CMakeLists.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-qt-${{ env.QT_VERSION }}-
+    
+    # 6. Создание директорий для сборки
+    - name: Create build directories
+      run: |
+        mkdir -p build_server
+        mkdir -p build_client
+        mkdir -p artifacts/Server
+        mkdir -p artifacts/Client
+        mkdir -p artifacts/installer
+    
+    # 7. Сборка Сервера
+    - name: Configure Server
+      working-directory: ./build_server
+      run: |
+        cmake ../${{ env.SERVER_PATH }} `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_CONFIGURATION_TYPES=Release `
+          -G "Visual Studio 17 2022" `
+          -A x64
+    
+    - name: Build Server
+      working-directory: ./build_server
+      run: cmake --build . --config Release --parallel
+    
+    # 8. Сборка Клиента
+    - name: Configure Client
+      working-directory: ./build_client
+      run: |
+        cmake ../${{ env.CLIENT_PATH }} `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_CONFIGURATION_TYPES=Release `
+          -G "Visual Studio 17 2022" `
+          -A x64
+    
+    - name: Build Client
+      working-directory: ./build_client
+      run: cmake --build . --config Release --parallel
+    
+    # 9. Подготовка артефактов для сервера
+    - name: Prepare Server artifacts
+      run: |
+        Copy-Item "build_server/Release/TelecomServer.exe" -Destination "artifacts/Server/"
+        Copy-Item "build_server/Release/*.dll" -Destination "artifacts/Server/" -ErrorAction SilentlyContinue
+        
+    # 10. Подготовка артефактов для клиента
+    - name: Prepare Client artifacts
+      run: |
+        Copy-Item "build_client/Release/TelecomClient.exe" -Destination "artifacts/Client/"
+        Copy-Item "build_client/Release/*.dll" -Destination "artifacts/Client/" -ErrorAction SilentlyContinue
+    
+    # 11. Копирование дополнительных файлов
+    - name: Copy additional files
+      run: |
+        Copy-Item "README.md" -Destination "artifacts/"
+        Copy-Item "LICENSE" -Destination "artifacts/" -ErrorAction SilentlyContinue
+    
+    # 12. Упаковка с помощью windeployqt (Сервер)
+    - name: Deploy Qt dependencies for Server
+      run: |
+        & "D:\a\_temp\install-qt-action\Qt\${{ env.QT_VERSION }}\msvc2019_64\bin\windeployqt.exe" `
+          --release `
+          --no-compiler-runtime `
+          --no-translations `
+          --no-virtualkeyboard `
+          --no-angle `
+          --no-opengl-sw `
+          artifacts/Server/TelecomServer.exe
+    
+    # 13. Упаковка с помощью windeployqt (Клиент)
+    - name: Deploy Qt dependencies for Client
+      run: |
+        & "D:\a\_temp\install-qt-action\Qt\${{ env.QT_VERSION }}\msvc2019_64\bin\windeployqt.exe" `
+          --release `
+          --no-compiler-runtime `
+          --no-translations `
+          --no-virtualkeyboard `
+          --no-angle `
+          --no-opengl-sw `
+          artifacts/Client/TelecomClient.exe
+    
+    # 14. Создание ZIP архива с сервером
+    - name: Create Server ZIP
+      run: |
+        Compress-Archive -Path "artifacts/Server/*" -DestinationPath "artifacts/TelecomServer-${{ github.run_number }}.zip"
+    
+    # 15. Создание ZIP архива с клиентом
+    - name: Create Client ZIP
+      run: |
+        Compress-Archive -Path "artifacts/Client/*" -DestinationPath "artifacts/TelecomClient-${{ github.run_number }}.zip"
+    
+    # 16. Создание полного архива
+    - name: Create Full Archive
+      run: |
+        Compress-Archive -Path "artifacts/Server", "artifacts/Client", "README.md" -DestinationPath "artifacts/TelecomSystem-Full-${{ github.run_number }}.zip"
+    
+    # 17. Создание инсталлятора (Inno Setup)
+    - name: Create Installer
+      uses: Minionguyjpro/Inno-Setup-Action@v1.2
+      with:
+        path: .github/installer/installer.iss
+        options: /O+ /DMyAppVersion=${{ github.run_number }}
+    
+    # 18. Загрузка артефактов
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: TelecomSystem-Build-${{ github.run_number }}
+        path: artifacts/
+        retention-days: 30
+        compression-level: 9
+    
+    # 19. Создание релиза (для тегов)
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/TelecomServer-${{ github.run_number }}.zip
+          artifacts/TelecomClient-${{ github.run_number }}.zip
+          artifacts/TelecomSystem-Full-${{ github.run_number }}.zip
+          artifacts/installer/TelecomSystem-Setup.exe
+        body: |
+          ## Telecom System v${{ github.ref_name }}
+          
+          ### Изменения в этой версии:
+          - Автоматическая сборка через GitHub Actions
+          - Включены все необходимые DLL
+          - Ready-to-run приложения
+          
+          ### Установка:
+          1. Скачайте TelecomSystem-Full-*.zip
+          2. Распакуйте в любую директорию
+          3. Запустите TelecomServer.exe
+          4. Запустите один или несколько TelecomClient.exe
+          
+          ### Системные требования:
+          - Windows 10/11 (64-bit)
+          - Visual C++ Redistributable 2022
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
