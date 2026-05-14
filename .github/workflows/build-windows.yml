@@ -130,8 +130,6 @@ jobs:
           --release `
           --no-compiler-runtime `
           --no-translations `
-          --no-virtualkeyboard `
-          --no-angle `
           --no-opengl-sw `
           artifacts/Server/Server.exe
     
@@ -142,8 +140,6 @@ jobs:
           --release `
           --no-compiler-runtime `
           --no-translations `
-          --no-virtualkeyboard `
-          --no-angle `
           --no-opengl-sw `
           artifacts/Client/Client.exe
     
