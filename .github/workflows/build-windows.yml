@@ -107,7 +107,7 @@ jobs:
     # 9. Подготовка артефактов для сервера
     - name: Prepare Server artifacts
       run: |
-        Copy-Item "build_server/Release/TelecomServer.exe" -Destination "artifacts/Server/"
+        Copy-Item "build_server/Release/Server.exe" -Destination "artifacts/Server/"
         Copy-Item "build_server/Release/*.dll" -Destination "artifacts/Server/" -ErrorAction SilentlyContinue
         
     # 10. Подготовка артефактов для клиента
@@ -132,7 +132,7 @@ jobs:
           --no-virtualkeyboard `
           --no-angle `
           --no-opengl-sw `
-          artifacts/Server/TelecomServer.exe
+          artifacts/Server/Server.exe
     
     # 13. Упаковка с помощью windeployqt (Клиент)
     - name: Deploy Qt dependencies for Client
@@ -144,12 +144,12 @@ jobs:
           --no-virtualkeyboard `
           --no-angle `
           --no-opengl-sw `
-          artifacts/Client/TelecomClient.exe
+          artifacts/Client/Client.exe
     
     # 14. Создание ZIP архива с сервером
     - name: Create Server ZIP
       run: |
-        Compress-Archive -Path "artifacts/Server/*" -DestinationPath "artifacts/TelecomServer-${{ github.run_number }}.zip"
+        Compress-Archive -Path "artifacts/Server/*" -DestinationPath "artifacts/Server-${{ github.run_number }}.zip"
     
     # 15. Создание ZIP архива с клиентом
     - name: Create Client ZIP
