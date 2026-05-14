@@ -2,6 +2,8 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QDateTime>
+#include <QOverload>
+#include <QAbstractSocket>
 
 TcpServer::TcpServer(QObject *parent)
     : QTcpServer(parent)
