@@ -53,6 +53,7 @@ jobs:
         arch: win64_msvc2019_64
         install-deps: true
         modules: qt5compat qtmultimedia qtserialport
+        dir: ${{ runner.temp }}\Qt
         cache: true
     
     # 5. Кэширование зависимостей
@@ -125,7 +126,7 @@ jobs:
     # 12. Упаковка с помощью windeployqt (Сервер)
     - name: Deploy Qt dependencies for Server
       run: |
-        & "D:\a\_temp\install-qt-action\Qt\${{ env.QT_VERSION }}\msvc2019_64\bin\windeployqt.exe" `
+        & "${{ runner.temp }}\Qt\bin\windeployqt.exe" `
           --release `
           --no-compiler-runtime `
           --no-translations `
