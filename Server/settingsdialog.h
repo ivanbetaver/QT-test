@@ -2,10 +2,11 @@
 #define SETTINGSDIALOG_H
 
 #include <QDialog>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QLabel>
-#include <QJsonObject>
+#include <QSettings>
+
+namespace Ui {
+class SettingsDialog;
+}
 
 class SettingsDialog : public QDialog
 {
@@ -15,20 +16,18 @@ public:
     explicit SettingsDialog(QWidget *parent = nullptr);
     ~SettingsDialog();
 
-    QJsonObject getSettings() const;
-
 private slots:
-    void accept() override;
-    void loadSettings();
+    void onAccepted();
+
+    void on_lineEdit_criticalCpu_editingFinished();
+
+    void on_lineEdit_criticalMemory_editingFinished();
+
+    void on_lineEdit_criticalLatency_editingFinished();
 
 private:
-    void setupUI();
-
-    QLineEdit* m_criticalCpu;
-    QLineEdit* m_criticalMemory;
-    QLineEdit* m_criticalLatency;
-    QPushButton* m_saveButton;
-    QPushButton* m_cancelButton;
+    Ui::SettingsDialog *ui_;
+    QSettings settings_;
 };
 
 #endif // SETTINGSDIALOG_H

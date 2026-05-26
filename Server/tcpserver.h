@@ -9,9 +9,6 @@
 
 class ClientHandler;
 
-/**
- * @brief TCP сервер для управления клиентами
- */
 class TcpServer : public QTcpServer
 {
     Q_OBJECT
@@ -20,17 +17,16 @@ public:
     explicit TcpServer(QObject *parent = nullptr);
     ~TcpServer();
 
-    void startServer(quint16 port);
-    void stopServer();
-    void sendCommandToClient(int clientId, const QString& command);
+    void start();
+    void stop();
+    void sendCommandToClient(const QString& clientId, const QString& command);
     void broadcastCommand(const QString& command);
     void updateSettings(const QJsonObject& settings);
 
 signals:
-    void clientConnected(int clientId, const QString& ip, int port);
-    void clientDisconnected(int clientId);
-    void dataReceived(int clientId, const QString& dataType,
-                      const QString& content, const QDateTime& time);
+    void clientConnected(const QString& clientId, const QString& ip, int port);
+    void clientDisconnected(const QString& clientId);
+    void messageReceived(const QString& clientId, const QString& message);
     void logMessage(const QString& message, const QString& type = "INFO");
 
 protected:
@@ -42,9 +38,9 @@ private slots:
     void onClientError(QAbstractSocket::SocketError error);
 
 private:
-    QMap<int, QTcpSocket*> m_clients;
-    QMap<int, QByteArray> m_readBuffers;
-    int m_nextClientId;
+    quint16 m_port;
+    QMap<QString, QTcpSocket*> m_clients;
+    QMap<QTcpSocket*, QString> m_sockets;
     QJsonObject m_settings;
 };
 

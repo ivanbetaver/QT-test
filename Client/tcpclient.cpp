@@ -1,23 +1,27 @@
-#include "TcpClient.h"
+#include "tcpclient.h"
+#include "eventsgenerator.h"
 #include <QJsonDocument>
 #include <QJsonParseError>
-#include <QThread>
 #include <QDateTime>
-#include <QRandomGenerator>
 #include <QDebug>
+#include <QRandomGenerator>
+#include <QUuid>
 
-TcpClient::TcpClient(QObject *parent)
-    : QObject(parent)
-    , m_socket(new QTcpSocket(this))
-    , m_reconnectTimer(new QTimer(this))
-    , m_dataTimer(new QTimer(this))
-    , m_isRunning(false)
-    , m_isConnected(false)
-    , m_clientId(-1)
+TcpClient::TcpClient(const QString& serverHost, const quint16& serverPort, QObject *parent)
+    : QObject(parent),
+    m_serverHost(serverHost),
+    m_serverPort(serverPort),
+    m_socket(new QTcpSocket(this)),
+    m_reconnectTimer(new QTimer(this)),
+    m_dataTimer(new QTimer(this)),
+    m_isRunning(false),
+    m_isConnected(false)
 {
+    // идентификатор клента
+    id_ = QUuid::createUuid().toString();
+
     // Настройка таймера переподключения
     m_reconnectTimer->setInterval(5000);
-    m_reconnectTimer->setSingleShot(true);
 
     // Настройка таймера отправки данных (случайная задержка)
     m_dataTimer->setSingleShot(true);
@@ -38,19 +42,30 @@ TcpClient::~TcpClient()
     m_socket->disconnectFromHost();
 }
 
-void TcpClient::connectToServer(const QString& host, quint16 port)
+void TcpClient::start()
 {
-    m_serverHost = host;
-    m_serverPort = port;
-    m_socket->connectToHost(host, port);
-    qDebug().noquote() << QString("[Клиент] Попытка подключения к %1:%2").arg(host).arg(port);
+    m_reconnectTimer->start();
+}
+
+void TcpClient::connectToServer()
+{
+    m_socket->connectToHost(m_serverHost, m_serverPort);
+    qDebug().noquote() << QString("[Клиент] Попытка подключения к %1:%2").arg(m_serverHost).arg(m_serverPort);
 }
 
 void TcpClient::onConnected()
 {
     m_isConnected = true;
     m_reconnectTimer->stop();
+    m_dataTimer->start();
     qDebug().noquote() << "[Клиент] Подключен к серверу";
+
+    // Отправка подтверждения подключения
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream << id_;
+    m_socket->write(data);
+    m_socket->flush();
     qDebug().noquote() << "[Клиент] Ожидание подтверждения подключения...";
 }
 
@@ -99,10 +114,8 @@ void TcpClient::onReadyRead()
             // Подтверждение подключения от сервера
             QString status = obj["status"].toString();
             QString message = obj["message"].toString();
-            m_clientId = obj["client_id"].toInt();
 
             qDebug().noquote() << QString("[Клиент] Получено подтверждение: %1").arg(message);
-            qDebug().noquote() << QString("[Клиент] ID клиента: %1").arg(m_clientId);
 
             if (status == "connected") {
                 qDebug().noquote() << "[Клиент] Ожидание команды старта...";
@@ -111,7 +124,7 @@ void TcpClient::onReadyRead()
             // Команда от сервера
             QString command = obj["command"].toString();
             qDebug().noquote() << QString("[Клиент] Получена команда: %1").arg(command);
-            onCommandReceived(obj);
+            processCommand(obj);
         }
     }
 }
@@ -123,7 +136,7 @@ void TcpClient::onError(QAbstractSocket::SocketError error)
 
 void TcpClient::onReconnectTimer()
 {
-    qDebug().noquote() << "[Клиент] Попытка переподключения...";
+    qDebug().noquote() << "[Клиент] Попытка подключения...";
     m_socket->connectToHost(m_serverHost, m_serverPort);
 }
 
@@ -138,7 +151,7 @@ void TcpClient::onDataTimer()
     }
 }
 
-void TcpClient::onCommandReceived(const QJsonObject& command)
+void TcpClient::processCommand(const QJsonObject& command)
 {
     QString cmd = command["command"].toString();
 
@@ -165,21 +178,7 @@ void TcpClient::onCommandReceived(const QJsonObject& command)
 
 void TcpClient::generateAndSendData()
 {
-    // Случайный выбор типа данных (NetworkMetrics, DeviceStatus, Log)
-    int type = QRandomGenerator::global()->bounded(3);
-
-    QString jsonData;
-    switch (type) {
-    case 0:
-        jsonData = generateNetworkMetrics();
-        break;
-    case 1:
-        jsonData = generateDeviceStatus();
-        break;
-    case 2:
-        jsonData = generateLog();
-        break;
-    }
+    QString jsonData = EventsGenerator::generateRandom();
 
     if (!jsonData.isEmpty()) {
         m_socket->write(jsonData.toUtf8() + "\n");
@@ -188,83 +187,7 @@ void TcpClient::generateAndSendData()
     }
 }
 
-QString TcpClient::generateNetworkMetrics()
-{
-    QJsonObject metrics;
-    metrics["type"] = "NetworkMetrics";
-    metrics["bandwidth"] = QRandomGenerator::global()->bounded(10, 1000) / 10.0; // 1.0 - 100.0 Mbps
-    metrics["latency"] = QRandomGenerator::global()->bounded(5, 150); // 5-150 ms
-    metrics["packet_loss"] = QRandomGenerator::global()->bounded(0, 100) / 1000.0; // 0-0.1%
-
-    QJsonDocument doc(metrics);
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-}
-
-QString TcpClient::generateDeviceStatus()
-{
-    QJsonObject status;
-    status["type"] = "DeviceStatus";
-    status["uptime"] = QRandomGenerator::global()->bounded(0, 86400); // 0-24 часов в секундах
-    status["cpu_usage"] = QRandomGenerator::global()->bounded(0, 100);
-    status["memory_usage"] = QRandomGenerator::global()->bounded(0, 100);
-
-    QJsonDocument doc(status);
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-}
-
-QString TcpClient::generateLog()
-{
-    QStringList severities = {"INFO", "WARNING", "ERROR", "DEBUG"};
-    QStringList messages = {
-        "Интерфейс eth0 перезапущен",
-        "Обнаружена высокая загрузка сети",
-        "Пакет потерян при передаче",
-        "Устройство успешно синхронизировано",
-        "Критическая ошибка в работе модуля связи",
-        "Обновление конфигурации применено",
-        "Таймаут соединения с удаленным узлом",
-        "Буфер обмена данных очищен",
-        "Запущена диагностика сети",
-        "Обнаружено подозрительное сетевое подключение"
-    };
-
-    // Генерация сообщения разной длины (короткое, среднее, длинное)
-    QString message;
-    int lengthType = QRandomGenerator::global()->bounded(3);
-
-    if (lengthType == 0) {
-        // Короткое сообщение (до 50 символов)
-        message = messages[QRandomGenerator::global()->bounded(messages.size())].left(50);
-    } else if (lengthType == 1) {
-        // Среднее сообщение (50-200 символов)
-        message = generateRandomString(50, 200);
-    } else {
-        // Длинное сообщение (200+ символов)
-        message = generateRandomString(200, 500);
-    }
-
-    QJsonObject log;
-    log["type"] = "Log";
-    log["severity"] = severities[QRandomGenerator::global()->bounded(severities.size())];
-    log["message"] = message;
-
-    QJsonDocument doc(log);
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-}
-
-QString TcpClient::generateRandomString(int minLen, int maxLen)
-{
-    int length = QRandomGenerator::global()->bounded(minLen, maxLen + 1);
-    const QString characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*() ";
-
-    QString result;
-    for (int i = 0; i < length; ++i) {
-        result += characters[QRandomGenerator::global()->bounded(characters.length())];
-    }
-    return result;
-}
-
-void TcpClient::sendJsonMessage(const QJsonObject& message)
+void TcpClient::sendMessage(const QJsonObject& message)
 {
     if (m_isConnected) {
         QJsonDocument doc(message);

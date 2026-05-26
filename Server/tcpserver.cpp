@@ -1,152 +1,108 @@
-#include "TcpServer.h"
-#include <QJsonDocument>
-#include <QJsonParseError>
-#include <QDateTime>
+#include "tcpserver.h"
 #include <QOverload>
 #include <QAbstractSocket>
+#include <QSettings>
+#include <QJsonDocument>
 
 TcpServer::TcpServer(QObject *parent)
     : QTcpServer(parent)
-    , m_nextClientId(1)
 {
-    // Настройки по умолчанию
-    m_settings["critical_cpu"] = 80;
-    m_settings["critical_memory"] = 85;
-    m_settings["critical_latency"] = 100;
-}
+    // Получение параметров подключения
+    QSettings settings("config.ini", QSettings::IniFormat);
+    m_port = settings.value("server/port").toInt();
+ }
 
 TcpServer::~TcpServer()
 {
-    stopServer();
+    stop();
 }
 
-void TcpServer::startServer(quint16 port)
+void TcpServer::start()
 {
-    if (listen(QHostAddress::Any, port)) {
-        emit logMessage(QString("Сервер запущен на порту %1").arg(port), "SUCCESS");
+    if (listen(QHostAddress::Any, m_port)) {
+        emit logMessage(QString("Сервер запущен на порту %1").arg(m_port), "SUCCESS");
     } else {
         emit logMessage(QString("Ошибка запуска сервера: %1").arg(errorString()), "ERROR");
     }
 }
 
-void TcpServer::stopServer()
+void TcpServer::stop()
 {
     for (QTcpSocket* socket : m_clients.values()) {
         socket->disconnectFromHost();
         socket->deleteLater();
     }
     m_clients.clear();
-    m_readBuffers.clear();
     close();
     emit logMessage("Сервер остановлен", "WARNING");
 }
 
 void TcpServer::incomingConnection(qintptr socketDescriptor)
 {
+    // Попытка подключения
     QTcpSocket* socket = new QTcpSocket(this);
     socket->setSocketDescriptor(socketDescriptor);
 
-    int clientId = m_nextClientId++;
-    m_clients[clientId] = socket;
-    m_readBuffers[clientId] = QByteArray();
-
-    // Подключение сигналов
+   // Подключение сигналов
     connect(socket, &QTcpSocket::readyRead, this, &TcpServer::onClientReadyRead);
     connect(socket, &QTcpSocket::disconnected, this, &TcpServer::onClientDisconnected);
     connect(socket, &QTcpSocket::errorOccurred, this, &TcpServer::onClientError);
-
-
-    // Отправка подтверждения подключения
-    QJsonObject ack;
-    ack["type"] = "connection_ack";
-    ack["status"] = "connected";
-    ack["client_id"] = clientId;
-    ack["message"] = "Подключение к серверу установлено";
-
-    QJsonDocument doc(ack);
-    socket->write(doc.toJson(QJsonDocument::Compact) + "\n");
-    socket->flush();
-
-    emit clientConnected(clientId, socket->peerAddress().toString(), socket->peerPort());
-    emit logMessage(QString("Новое подключение: клиент %1").arg(clientId), "SUCCESS");
 }
 
 void TcpServer::onClientReadyRead()
 {
     QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
-    if (!socket) return;
+    if (!socket)
+        return;
 
-    int clientId = m_clients.key(socket, -1);
-    if (clientId == -1) return;
+    auto it = m_sockets.find(socket);
+    // Подтверждение подключения
+    if (it == m_sockets.end()) {
+        QDataStream stream(socket);
+        QString clientId;
+        stream >> clientId;
+        m_clients[clientId] = socket;
+        m_sockets[socket] = clientId;
+        emit clientConnected(clientId, socket->peerAddress().toString(), socket->peerPort());
+        emit logMessage(QString("Клиент %1 подключен (IP: %2, Порт: %3)")
+                            .arg(clientId).arg(socket->peerAddress().toString()).arg(socket->peerPort()), "SUCCESS");
 
-    m_readBuffers[clientId].append(socket->readAll());
+        QJsonObject ack;
+        ack["type"] = "connection_ack";
+        ack["status"] = "connected";
+        ack["message"] = "Подключение к серверу установлено";
+
+        QJsonDocument doc(ack);
+        socket->write(doc.toJson(QJsonDocument::Compact) + "\n");
+        socket->flush();
+        return;
+    }
+
+    QString clientId = it.value();
+    QByteArray buffer = socket->readAll();
 
     // Обработка полных сообщений (разделенных \n)
-    while (m_readBuffers[clientId].contains('\n')) {
-        int index = m_readBuffers[clientId].indexOf('\n');
-        QByteArray message = m_readBuffers[clientId].left(index);
-        m_readBuffers[clientId].remove(0, index + 1);
-
-        // Парсинг JSON
-        QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(message, &parseError);
-
-        if (parseError.error != QJsonParseError::NoError) {
-            emit logMessage(QString("Ошибка парсинга JSON от клиента %1: %2")
-                                .arg(clientId).arg(parseError.errorString()), "ERROR");
-            continue;
-        }
-
-        if (!doc.isObject()) {
-            emit logMessage(QString("Некорректный JSON от клиента %1").arg(clientId), "ERROR");
-            continue;
-        }
-
-        QJsonObject obj = doc.object();
-        QString dataType = obj["type"].toString();
-
-        if (dataType == "NetworkMetrics" || dataType == "DeviceStatus" || dataType == "Log") {
-            QString content = QString::fromUtf8(message);
-            emit dataReceived(clientId, dataType, content, QDateTime::currentDateTime());
-
-            // Проверка критических значений
-            if (dataType == "DeviceStatus") {
-                int cpu = obj["cpu_usage"].toInt();
-                int memory = obj["memory_usage"].toInt();
-
-                if (cpu > m_settings["critical_cpu"].toInt()) {
-                    emit logMessage(QString("Клиент %1: Критическая загрузка CPU: %2%%")
-                                        .arg(clientId).arg(cpu), "WARNING");
-                }
-                if (memory > m_settings["critical_memory"].toInt()) {
-                    emit logMessage(QString("Клиент %1: Критическая загрузка памяти: %2%%")
-                                        .arg(clientId).arg(memory), "WARNING");
-                }
-            } else if (dataType == "NetworkMetrics") {
-                double latency = obj["latency"].toDouble();
-                if (latency > m_settings["critical_latency"].toDouble()) {
-                    emit logMessage(QString("Клиент %1: Высокая задержка сети: %2 ms")
-                                        .arg(clientId).arg(latency), "WARNING");
-                }
-            }
-        } else {
-            emit logMessage(QString("Неизвестный тип данных от клиента %1: %2")
-                                .arg(clientId).arg(dataType), "WARNING");
-        }
+    while (buffer.contains('\n')) {
+        int index = buffer.indexOf('\n');
+        QString message = QString::fromUtf8(buffer.left(index));
+        emit messageReceived(clientId, message);
+        buffer.remove(0, index + 1);
     }
 }
 
 void TcpServer::onClientDisconnected()
 {
     QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
-    if (!socket) return;
+    if (!socket)
+        return;
 
-    int clientId = m_clients.key(socket, -1);
-    if (clientId != -1) {
-        m_clients.remove(clientId);
-        m_readBuffers.remove(clientId);
+    auto it = m_sockets.find(socket);
+    if (it != m_sockets.end()) {
+        const QString& clientId = it.value();
         emit clientDisconnected(clientId);
         emit logMessage(QString("Клиент %1 отключен").arg(clientId), "WARNING");
+        m_clients.remove(clientId);
+        m_sockets.remove(socket);
     }
 
     socket->deleteLater();
@@ -157,11 +113,11 @@ void TcpServer::onClientError(QAbstractSocket::SocketError error)
     QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
     if (!socket) return;
 
-    int clientId = m_clients.key(socket, -1);
+    const QString& clientId = m_clients.key(socket, "Неизвестный клиент");
     emit logMessage(QString("Ошибка клиента %1: %2").arg(clientId).arg(socket->errorString()), "ERROR");
 }
 
-void TcpServer::sendCommandToClient(int clientId, const QString& command)
+void TcpServer::sendCommandToClient(const QString& clientId, const QString& command)
 {
     if (m_clients.contains(clientId)) {
         QJsonObject cmd;
@@ -176,7 +132,7 @@ void TcpServer::sendCommandToClient(int clientId, const QString& command)
 
 void TcpServer::broadcastCommand(const QString& command)
 {
-    for (int clientId : m_clients.keys()) {
+    for (const QString& clientId : m_clients.keys()) {
         sendCommandToClient(clientId, command);
     }
 }
