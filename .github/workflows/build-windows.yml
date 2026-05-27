@@ -75,7 +75,6 @@ jobs:
         mkdir -p build_client
         mkdir -p artifacts/Server
         mkdir -p artifacts/Client
-        mkdir -p artifacts/installer
     
     # 7. Сборка Сервера
     - name: Configure Server
@@ -111,11 +110,21 @@ jobs:
         Copy-Item "build_server/Release/Server.exe" -Destination "artifacts/Server/"
         Copy-Item "build_server/Release/*.dll" -Destination "artifacts/Server/" -ErrorAction SilentlyContinue
         
+    # 9.1. Копирование файла конфигурации для сервера
+    - name: Prepare Server cofig
+      run: |
+        Copy-Item "config.ini" -Destination "artifacts/Server/"
+        
     # 10. Подготовка артефактов для клиента
     - name: Prepare Client artifacts
       run: |
         Copy-Item "build_client/Release/Client.exe" -Destination "artifacts/Client/"
         Copy-Item "build_client/Release/*.dll" -Destination "artifacts/Client/" -ErrorAction SilentlyContinue
+        
+    # 10.1. Копирование файла конфигурации для клиента
+    - name: Prepare Client config
+      run: |
+        Copy-Item "config.ini" -Destination "artifacts/Client/"
     
     # 11. Копирование дополнительных файлов
     - name: Copy additional files
